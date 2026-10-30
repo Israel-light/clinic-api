@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clinic booking</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+  .slot { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px solid #ddd; }
+  input, button { font: inherit; padding: .4rem .6rem; margin: .25rem 0; }
+  form { margin-top: 1rem; display: grid; gap: .25rem; max-width: 320px; }
+  #msg { margin-top: 1rem; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Clinic appointments</h1>
+<label>API key <input id="key" type="password"></label>
+<button id="load">Load slots</button>
+
+<div id="slots"></div>
+
+<form id="form" hidden>
+  <h2 id="chosen"></h2>
+  <input id="name" placeholder="Your name" required>
+  <input id="email" type="email" placeholder="Email" required>
+  <button type="submit">Book</button>
+</form>
+
+<div id="msg" role="status"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let chosen = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { "X-API-Key": $("key").value, "Content-Type": "application/json", ...(opts.headers || {}) }
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+function say(text, bad) {
+  const m = $("msg");
+  m.textContent = text;
+  m.style.color = bad ? "#b00020" : "#0a6b2d";
+}
+
+async function loadSlots() {
+  const { res, data } = await api("/slots");
+  if (!res.ok) return say(data.error || "Could not load slots", true);
+  const box = $("slots");
+  box.replaceChildren();
+  for (const s of data.slots) {
+    const row = document.createElement("div");
+    row.className = "slot";
+    const label = document.createElement("span");
+    label.textContent = s.provider + ": " + new Date(s.start).toLocaleString();
+    const btn = document.createElement("button");
+    btn.textContent = s.available ? "Book" : "Taken";
+    btn.disabled = !s.available;
+    btn.onclick = () => {
+      chosen = s;
+      $("chosen").textContent = "Book " + s.provider + ", " + new Date(s.start).toLocaleString();
+      $("form").hidden = false;
+    };
+    row.append(label, btn);
+    box.append(row);
+  }
+  say(data.slots.length + " slots loaded");
+}
+
+$("load").onclick = loadSlots;
+
+$("form").onsubmit = async e => {
+  e.preventDefault();
+  const { res, data } = await api("/bookings", {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    body: JSON.stringify({ slot_id: chosen.id, name: $("name").value, email: $("email").value })
+  });
+  if (res.status === 201) {
+    say("Confirmed! Booking " + data.id + " is " + data.status + ".");
+    $("form").hidden = true;
+    loadSlots();
+  } else {
+    say(data.error || "Booking failed", true);
+  }
+};
+</script>
+</body>
+</html>
