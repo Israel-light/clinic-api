@@ -127,7 +127,7 @@ type limiter struct {
 	hits map[string][]time.Time
 }
 
-var r1 = &limiter{hits: map[string][]time.Time{}}
+var rl = &limiter{hits: map[string][]time.Time{}}
 
 func (l *limiter) allow(key string) (bool, int) {
 	l.mu.Lock()
